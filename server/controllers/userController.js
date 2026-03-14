@@ -1,6 +1,6 @@
-import ErrorHandler from "../middlewares/errorMiddleware";
+import ErrorHandler from "../middlewares/errorMiddleware.js";
 import { catchAsyncError } from "../middlewares/catchasyncError.js";
-import User from "../models/userModel.js";
+import { User } from "../models/userModel.js";
 import sendEmail from "../utils/sendEmail.js";
 
 export const registerUser = catchAsyncError(async (req, res, next) => {
@@ -62,13 +62,17 @@ export const registerUser = catchAsyncError(async (req, res, next) => {
       password,
       phone,
     };
-    const newUser = await User.create(userData);
-    const verificationCode = User.generateVerificationCode();
+    const newUser = new User(userData);
+    const verificationCode = newUser.generateVerificationCode();
     await newUser.save();
-    sendVerificationCode(verificationMethod, email, phone, verificationCode);
-    res.status(200).json({
-      success: true,
-    });
+    sendVerificationCode(
+      verificationMethod,
+      email,
+      name,
+      phone,
+      verificationCode,
+      res,
+    );
   } catch (error) {
     next(error);
   }
@@ -77,12 +81,38 @@ export const registerUser = catchAsyncError(async (req, res, next) => {
 function sendVerificationCode(
   verificationMethod,
   email,
+  name,
   phone,
   verificationCode,
+  res,
 ) {
-  if (verificationMethod === "email") {
-    const message = generateEmailTemplate(verificationCode);
-    sendEmail({ email, subject: "Your verificationCode", message });
+  try {
+    if (verificationMethod === "email") {
+      const message = generateEmailTemplate(verificationCode);
+      sendEmail({ email, subject: "Your Verification Code", message });
+      res.status(200).json({
+        success: true,
+        message: `Verification email sent successfully to ${name}.`,
+      });
+    } else if (verificationMethod === "phone") {
+      // Implement SMS sending logic here using an SMS service provider like Twilio or Nexmo
+      const verificationCodeWithSpace = verificationCode
+        .toString() //convert number otp to string
+        .split("") //split the string into an array of individual characters
+        .join(" "); //join the array back into a string with spaces between each character
+
+      console.log(
+        `Sending SMS to ${phone} with verification code: ${verificationCodeWithSpace}`,
+      );
+      res.status(200).json({
+        success: true,
+        message: `Verification SMS sent successfully to ${name}.`,
+      });
+    } else {
+      throw new ErrorHandler("Invalid verification method", 400);
+    }
+  } catch (error) {
+    throw error;
   }
 }
 function generateEmailTemplate(verificationCode) {

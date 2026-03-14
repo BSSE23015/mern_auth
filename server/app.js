@@ -4,6 +4,7 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import { connectDB } from "./database/dbConnection.js";
 import { ErrorMiddleware } from "./middlewares/errorMiddleware.js";
+import userRouter from "./routes/userRouter.js";
 
 export const app = express();
 config({ path: "./config.env" }); //mention the path of config.env file
@@ -19,6 +20,7 @@ app.use(
 app.use(express.json()); //middleware to parse incoming JSON data in request bodies.
 app.use(cookieParser()); //middleware to parse cookies from incoming requests, allowing the server to read and manipulate cookies as needed.
 app.use(express.urlencoded({ extended: true })); //middleware to parse URL-encoded data from incoming requests, allowing the server to handle form submissions and other URL-encoded data.
+app.use("/api/v1", userRouter); //middleware to mount the userRouter on the /api/v1/users path, meaning that any requests to this path will be handled by the routes defined in userRouter.
 
 connectDB();
 

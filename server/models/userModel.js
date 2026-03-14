@@ -30,11 +30,12 @@ const userSchema = new mongoose.Schema({
   },
 });
 
-userSchema.pre("save", async function (next) {
+userSchema.pre("save", async function () {
   if (!this.isModified("password")) {
-    return next(); //if password is not modified, then skip hashing and move to next middleware or save operation
+    return; //if password is not modified, then skip hashing and move to next middleware or save operation
   }
   this.password = await bcrypt.hash(this.password, 10); //hash the password with a salt round of 10 before saving it to the database. This ensures that the password is stored securely and not in plain text.
+  // next();
 });
 
 userSchema.methods.comparePassword = async function (password) {
@@ -43,7 +44,7 @@ userSchema.methods.comparePassword = async function (password) {
 
 userSchema.methods.generateVerificationCode = function () {
   const generateRandomFiveDigitCode = () => {
-    const firstDigit = Math.floor(Math.random() + 9 + 1); // Generate the first digit (1-9)
+    const firstDigit = Math.floor(Math.random() * 9 + 1); // Generate the first digit (1-9)
     const remainingDigits = Math.floor(Math.random() * 10000)
       .toString()
       .padStart(4, "0"); // Generate the remaining 4 digits (0000-9999) and pad with leading zeros if necessary
