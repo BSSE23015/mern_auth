@@ -253,7 +253,7 @@ export const verifyotp = catchAsyncError(async (req, res, next) => {
     // mongoose only checks what changed
     // and null is acceptable for optional fields ✅
 
-    sendToken();
+    sendToken(user, 200, "User registered and verified successfully", res);
   } catch (error) {
     return next(new ErrorHandler("Internal Server Error", 500));
   }
