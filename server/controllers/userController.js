@@ -277,3 +277,23 @@ export const login = catchAsyncError(async (req, res, next) => {
     sendToken(user, 200, "Login successful", res);
   }
 });
+export const logout = catchAsyncError(async (req, res, next) => {
+  res
+    .status(200)
+    .cookie("authToken", null, {
+      httpOnly: true,
+      expires: new Date(Date.now()),
+    })
+    .json({
+      success: true,
+      message: "Logged out successfully",
+    });
+});
+
+export const getMyProfile = catchAsyncError(async (req, res, next) => {
+  const user = req.user; //req.user is set in the isAuthenticated middleware after verifying the JWT token and fetching the user's information from the database. So when a request is made to this route, it will have access to the authenticated user's information through req.user.
+  res.status(200).json({
+    success: true,
+    user,
+  });
+});
