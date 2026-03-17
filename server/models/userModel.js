@@ -12,6 +12,7 @@ const userSchema = new mongoose.Schema({
     type: String,
     minLength: [6, "Password must be at least 6 characters long"],
     maxLength: [32, "Password cannot exceed 32 characters"],
+    select: false, // Exclude the password field from query results by default for security reasons. This means that when you fetch a user from the database, the password will not be included in the returned data unless you explicitly request it.
   },
   phone: {
     type: String,

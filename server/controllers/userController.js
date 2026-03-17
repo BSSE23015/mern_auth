@@ -258,3 +258,22 @@ export const verifyotp = catchAsyncError(async (req, res, next) => {
     return next(new ErrorHandler("Internal Server Error", 500));
   }
 });
+
+export const login = catchAsyncError(async (req, res, next) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return next(new ErrorHandler("Invalid email or password", 400));
+  }
+  const user = await User.findOne({ email, accountVerified: true }).select(
+    "+password",
+  ); //we need to select password here because in user schema, we set select: false for password field for security reasons. So by default, when we query the user, the password field is not included in the result. But during login, we need to compare the provided password with the hashed password stored in the database. To do that, we need to explicitly include the password field in our query result using .select("+password").
+  if (!user) {
+    return next(new ErrorHandler("Invalid email or password", 400));
+  }
+  let isCorrectPassword = await user.comparePassword(password);
+  if (!isCorrectPassword) {
+    return next(new ErrorHandler("Invalid email or password", 400));
+  } else {
+    sendToken(user, 200, "Login successful", res);
+  }
+});
