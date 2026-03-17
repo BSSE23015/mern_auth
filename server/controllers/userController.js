@@ -2,6 +2,7 @@ import ErrorHandler from "../middlewares/errorMiddleware.js";
 import { catchAsyncError } from "../middlewares/catchasyncError.js";
 import { User } from "../models/userModel.js";
 import sendEmail from "../utils/sendEmail.js";
+import { sendToken } from "../utils/sendToken.js";
 
 export const registerUser = catchAsyncError(async (req, res, next) => {
   try {
@@ -160,3 +161,100 @@ function generateEmailTemplate(verificationCode) {
 </html>
   `;
 }
+
+export const verifyotp = catchAsyncError(async (req, res, next) => {
+  const { email, otp, phone } = req.body;
+  function validatePhoneNumber(phone) {
+    const phoneRegex = /^\+923\d{9}$/;
+    return phoneRegex.test(phone);
+  }
+  if (!validatePhoneNumber(phone)) {
+    return next(
+      new ErrorHandler(
+        "Invalid phone number format. It should start with +923 followed by 9 digits.",
+        400,
+      ),
+    );
+  }
+  try {
+    const userAllEntries = await User.find({
+      $or: [
+        { email, accountVerified: false },
+        { phone, accountVerified: false },
+      ],
+    }).sort({ createdAt: -1 }); // Sort by creation date in descending order
+    //     With .sort({ createdAt: -1 }) ✅ newest first
+    // User attempt 3 → createdAt: 5:20pm  ← first
+    // User attempt 2 → createdAt: 5:10pm
+    // User attempt 1 → createdAt: 5:00pm  ← last
+
+    if (!userAllEntries) {
+      return next(
+        new ErrorHandler(
+          "No registration attempt found for this email or phone number",
+          400,
+        ),
+      );
+    }
+    let user;
+    if (userAllEntries.length > 1) {
+      user = userAllEntries[0]; // Get the most recent registration attempt
+      await User.deleteMany({
+        _id: { $ne: user._id }, // Delete all other attempts except the most recent one
+        $or: [
+          { phone, accountVerified: false },
+          { email, accountVerified: false },
+        ],
+      });
+    } else {
+      user = userAllEntries[0];
+    }
+    if (user.verificationCode != Number(otp)) {
+      return next(new ErrorHandler("Invalid OTP", 400));
+    }
+    const currentTime = Date.now();
+    // Date.now() returns current time in milliseconds
+    // example: 1714500000000
+
+    const verificationCodeExpire = new Date(
+      user.verificationCodeExpire,
+    ).getTime();
+    // user.verificationCodeExpire is a Date object stored in DB
+    // new Date() converts it to a JavaScript Date object
+    // .getTime() converts it to milliseconds so we can compare it with currentTime
+    // example: 1714500300000
+
+    // WHY milliseconds?
+    // currentTime > verificationCodeExpire → OTP expired ❌
+    // currentTime < verificationCodeExpire → OTP still valid ✅
+    if (currentTime > verificationCodeExpire) {
+      return next(
+        new ErrorHandler("OTP has expired. Please register again.", 400),
+      );
+    }
+    user.accountVerified = true;
+    // OTP was correct → mark user as verified ✅
+
+    user.verificationCode = null;
+    // delete the OTP code from DB
+    // its useless now, no need to keep it! 🗑️
+
+    user.verificationCodeExpire = null;
+    // delete the expiry time too
+    // also useless now! 🗑️
+
+    await user.save({ validateModifiedOnly: true });
+    // save these changes to DB
+    // verificationCode is type: Number in schema
+    // but you set it to null
+    // if mongoose validates ALL fields → ERROR! ❌
+
+    // with validateModifiedOnly: true
+    // mongoose only checks what changed
+    // and null is acceptable for optional fields ✅
+
+    sendToken();
+  } catch (error) {
+    return next(new ErrorHandler("Internal Server Error", 500));
+  }
+});
