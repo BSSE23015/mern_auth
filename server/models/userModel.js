@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
 
 const userSchema = new mongoose.Schema({
   name: String,
@@ -65,4 +66,14 @@ userSchema.methods.generateToken = async function () {
   });
 };
 
+userSchema.methods.generatePasswordResetToken = function () {
+  const resetToken = crypto.randomBytes(20).toString("hex"); // Generate a random token using crypto library. This token will be used to identify the password reset request.
+
+  this.resetPasswordToken = crypto
+    .createHash("sha256")
+    .update(resetToken)
+    .digest("hex"); // Hash the reset token using SHA-256 algorithm and store it in the database. This ensures that even if someone gains access to the database, they won't be able to see the actual reset token.
+  this.resetPasswordExpire = Date.now() + 10 * 60 * 1000; // Set the reset token to expire in 10 minutes. This adds an extra layer of security by ensuring that the token cannot be used indefinitely.
+  return resetToken; // Return the original reset token (not the hashed version) so that it can be sent to the user's email for password reset.
+};
 export const User = mongoose.model("User", userSchema);

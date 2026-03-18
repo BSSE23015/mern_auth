@@ -297,3 +297,55 @@ export const getMyProfile = catchAsyncError(async (req, res, next) => {
     user,
   });
 });
+
+export const forgotPassword = catchAsyncError(async (req, res, next) => {
+  const email = req.body?.email;
+  if (!email) {
+    return next(new ErrorHandler("Please provide an email address", 400));
+  }
+  // STEP 1 - find verified user by email
+  const user = await User.findOne({
+    email: req.body.email,
+    accountVerified: true, // ← must be verified user!
+  });
+  if (!user) {
+    return next(new ErrorHandler("User not found", 404));
+  }
+  try {
+    // STEP 2 - generate reset token
+    const resetToken = user.generatePasswordResetToken();
+    // resetToken = "a1b2c3" (unhashed, for email)
+    // user.resetPasswordToken = "x9f2k3" (hashed, saved in DB)
+
+    // STEP 3 - save hashed token to DB
+    await user.save({ validateBeforeSave: false });
+    //                              ↑
+    // skip all validations
+    // we're only saving token fields!
+
+    // STEP 4 - create reset URL
+    const resetPasswordUrl = `${process.env.FRONTEND_URL}/password/reset/${resetToken}`;
+    // example:
+    // http://yourapp.com/password/reset/a1b2c3
+
+    // STEP 5 - send email
+    sendEmail({
+      email: user.email,
+      subject: "Reset Password",
+      message: `Your reset password link is: ${resetPasswordUrl} if u didnt request this, please ignore this email`,
+    });
+    // you never send a response back!
+    res.status(200).json({
+      success: true,
+      message: `Reset password email sent to ${email} successfully`,
+    });
+  } catch (error) {
+    // clean up! token is useless if email failed
+    console.log("REAL ERROR:", error); // ← ADD THIS!
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpire = undefined;
+    await user.save({ validateBeforeSave: false });
+    return next(new ErrorHandler("Failed to send reset password email", 500));
+    // ↑ remove token from DB so user can try again!
+  }
+});
