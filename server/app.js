@@ -5,6 +5,7 @@ import cookieParser from "cookie-parser";
 import { connectDB } from "./database/dbConnection.js";
 import { ErrorMiddleware } from "./middlewares/errorMiddleware.js";
 import userRouter from "./routes/userRouter.js";
+import { removeUnverifiedUsers } from "./automation/removeUnregisteredUsers.js";
 
 export const app = express();
 config({ path: "./config.env" }); //mention the path of config.env file
@@ -23,6 +24,6 @@ app.use(express.urlencoded({ extended: true })); //middleware to parse URL-encod
 app.use("/api/v1", userRouter); //middleware to mount the userRouter on the /api/v1/users path, meaning that any requests to this path will be handled by the routes defined in userRouter.
 
 connectDB();
-
+removeUnverifiedUsers(); //function to schedule a cron job that runs every 30 minutes to remove unverified users from the database. This helps to keep the user database clean and free of inactive accounts that were never verified.
 app.use(ErrorMiddleware); //middleware to handle errors that occur during request processing. It captures any errors thrown in the application and sends a structured response to the client, ensuring consistent error handling throughout the server.
 //the error middleware is always put at the end of all routes and other middlewares because it needs to catch any errors that occur in those routes and middlewares. If it were placed before them, it would not be able to catch those errors effectively.

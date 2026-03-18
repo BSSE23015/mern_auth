@@ -3,6 +3,7 @@ import { catchAsyncError } from "../middlewares/catchasyncError.js";
 import { User } from "../models/userModel.js";
 import sendEmail from "../utils/sendEmail.js";
 import { sendToken } from "../utils/sendToken.js";
+import crypto from "crypto";
 
 export const registerUser = catchAsyncError(async (req, res, next) => {
   try {
@@ -43,20 +44,20 @@ export const registerUser = catchAsyncError(async (req, res, next) => {
       );
     }
 
-    const registrationAttemptsByUser = await User.find({
-      $or: [
-        { email, accountVerified: false },
-        { phone, accountVerified: false },
-      ],
-    });
-    if (registrationAttemptsByUser.length > 3) {
-      return next(
-        new ErrorHandler(
-          "Too many registration attempts. Please try again after an hour",
-          400,
-        ),
-      );
-    }
+    // const registrationAttemptsByUser = await User.find({
+    //   $or: [
+    //     { email, accountVerified: false },
+    //     { phone, accountVerified: false },
+    //   ],
+    // });
+    // if (registrationAttemptsByUser.length > 3) {
+    //   return next(
+    //     new ErrorHandler(
+    //       "Too many registration attempts. Please try again after an hour",
+    //       400,
+    //     ),
+    //   );
+    // }/// we can also implement this with a separate collection to track registration attempts and their timestamps, and then check that collection before allowing a new registration attempt. This way, we can easily implement the logic to block further attempts after 3 tries and unblock after an hour without affecting the user data in the main user collection.
     const userData = {
       name,
       email,
@@ -348,4 +349,31 @@ export const forgotPassword = catchAsyncError(async (req, res, next) => {
     return next(new ErrorHandler("Failed to send reset password email", 500));
     // ↑ remove token from DB so user can try again!
   }
+});
+
+export const resetPassword = catchAsyncError(async (req, res, next) => {
+  const { token } = req.params;
+  const resetToken = crypto.createHash("sha256").update(token).digest("hex"); // Hash the provided token to compare with the hashed token stored in the database. This ensures that even if someone intercepts the token, they won't be able to use it maliciously since only the hashed version is stored in the database.
+  const user = await User.findOne({
+    resetPasswordToken: resetToken,
+    resetPasswordExpire: { $gt: Date.now() }, // Check if the reset token has not expired by comparing the current time with the resetPasswordExpire field in the database. If the current time is greater than the resetPasswordExpire, it means the token has expired and cannot be used for resetting the password.
+  });
+  if (!user) {
+    return next(
+      new ErrorHandler(
+        "Invalid or expired reset token. Please try again.",
+        400,
+      ),
+    );
+  }
+  if (req.body.password !== req.body.confirmPassword) {
+    return next(
+      new ErrorHandler("Password and confirm password do not match", 400),
+    );
+  }
+  user.password = req.body.password; // Update the user's password with the new password provided in the request body. The password will be hashed before saving to the database due to the pre-save middleware defined in the user schema.
+  user.resetPasswordToken = undefined;
+  user.resetPasswordExpire = undefined; // Clear the reset token and its expiration time from the database since they are no longer needed after a successful password reset.
+  await user.save();
+  sendToken(user, 200, "Password reset successful", res); // After successfully resetting the password, a new JWT token is generated and sent back to the client using the sendToken utility function. This allows the user to be automatically logged in after resetting their password.
 });
